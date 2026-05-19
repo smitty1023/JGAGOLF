@@ -1,0 +1,20 @@
+{
+  "name": "JGA Turnier 2026",
+  "short_name": "JGA Golf",
+  "description": "Junggesellenabschied Golf Turnierwertung",
+  "start_url": "./JGA-Turnier.html",
+  "display": "standalone",
+  "background_color": "#08120a",
+  "theme_color": "#08120a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["sports"],
+  "lang": "de"
+}
