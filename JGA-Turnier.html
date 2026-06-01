@@ -78,7 +78,7 @@ const FORMAT_LABELS={matchplay:'⚔️ Match Play',fourball:'🏌️ Four-Ball',
 
 // ─── FIREBASE REFS ────────────────────────────────────────────────────────
 const settingsRef=doc(db,'jga2026','settings');
-const roundsRef=(n)=>doc(db,'jga2026','rounds',`round${n}`);
+const roundsRef=(n)=>doc(db,'jga2026-rounds',`round${n}`);
 const teamRef=doc(db,'jga2026','team');
 const chatCol=collection(db,'jga2026-chat');
 
