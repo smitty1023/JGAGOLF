@@ -470,8 +470,9 @@ function buildRoundGame(){
   const flightTabs=numTabs>1?`<div style="display:flex;border-top:1px solid ${BOR}">
     ${Array.from({length:numTabs},(_,fi)=>{
       const tf=isTeam?teamFlights[fi]:null;
-      const label=isTeam?
-        (fmt==='matchplay'?`⚔️ ${settings.players[tf.red[0]]?.name?.split(' ')[0]||'?'} vs ${settings.players[tf.blue[0]]?.name?.split(' ')[0]||'?'}`:`Flight ${fi+1}`)
+      const tfSafe=tf||{red:[],blue:[]};
+      const label=isTeam&&tfSafe.red.length&&tfSafe.blue.length?
+        (fmt==='matchplay'?`⚔️ ${settings.players[tfSafe.red[0]]?.name?.split(' ')[0]||'?'} vs ${settings.players[tfSafe.blue[0]]?.name?.split(' ')[0]||'?'}`:`Flight ${fi+1}`)
         :`Flight ${fi+1}`;
       return `<button id="ft-${fi}" style="flex:1;padding:7px 2px;border:none;background:${af===fi?'rgba(212,168,67,.12)':'transparent'};color:${af===fi?G:'#4a6a4a'};font-size:10px;font-weight:${af===fi?700:400};border-bottom:2px solid ${af===fi?G:'transparent'};cursor:pointer;font-family:inherit">${label}</button>`;
     }).join('')}
@@ -479,8 +480,11 @@ function buildRoundGame(){
 
   // ── Live match status bar (team formats) ──
   let matchBar='';
-  if(isTeam && teamFlights.length>0){
-    const tf=teamFlights[Math.min(af,teamFlights.length-1)];
+  if(isTeam && teamFlights.length>0 && flight.length>=2){
+    const tfIdx=Math.min(af,teamFlights.length-1);
+    const tf=teamFlights[tfIdx]||{red:[],blue:[]};
+    if(!tf.red.length||!tf.blue.length){matchBar='<div style="font-size:11px;color:#4a6a4a;text-align:center;padding:8px">Teams noch nicht zugewiesen</div>';}
+    else{
     const rName=tf.red.map(pi=>settings.players[pi]?.name?.split(' ')[0]||'?').join('/');
     const bName=tf.blue.map(pi=>settings.players[pi]?.name?.split(' ')[0]||'?').join('/');
     let stat;
@@ -488,6 +492,7 @@ function buildRoundGame(){
     else if(fmt==='fourball') stat=calcFourBallStatus(tf.red,tf.blue);
     else stat=calcGreensomesStatus(Math.min(af,teamFlights.length-1));
     matchBar=buildMatchLiveBar(stat,rName,bName);
+    } // close else
   }
 
   // ── Score cards ──
@@ -595,7 +600,7 @@ function buildRoundGame(){
   </div>`;
 
   // Live ranking (single/einzel only, for team show match bars)
-  const allLiveMatches=isTeam?teamFlights.map((tf,fi)=>{
+  const allLiveMatches=isTeam?teamFlights.filter(tf=>tf.red.length&&tf.blue.length).map((tf,fi)=>{
     const rName=tf.red.map(pi=>settings.players[pi]?.name?.split(' ')[0]||'?').join('/');
     const bName=tf.blue.map(pi=>settings.players[pi]?.name?.split(' ')[0]||'?').join('/');
     let stat;
@@ -959,24 +964,21 @@ function attachAll(){
     };
   });
 
-  // Format – ask before clearing when switching to single
+  // Format – ask before clearing on any format switch
   ['single','matchplay','fourball','greensomes'].forEach(f=>{
     const el=document.getElementById('fmt-'+f);
     if(el)el.onclick=()=>{
+      if(f===roundData.format) return;
       const hadScores=roundData.scores.some(ps=>ps.some(s=>s>0));
-      if(f==='single'&&roundData.format!=='single'&&hadScores){
-        if(!confirm('Zum Einzel-Format wechseln?
-
-Achtung: Die Team-Scores werden gelöscht!')) return;
-        roundData.scores=Array.from({length:9},()=>Array(18).fill(0));
-        roundData.greenScores={};
-        roundData.teams=Array(9).fill(null);
-      } else if(f!=='single'&&roundData.format==='single'&&hadScores){
-        if(!confirm('Zum Team-Format wechseln?
-
-Achtung: Die Einzel-Scores werden gelöscht!')) return;
-        roundData.scores=Array.from({length:9},()=>Array(18).fill(0));
+      const hadGreen=roundData.greenScores&&Object.values(roundData.greenScores).some(gs=>(gs.red||[]).some(s=>s>0));
+      const fmtNames={single:'Einzel',matchplay:'Match Play',fourball:'Four-Ball',greensomes:'Greensomes'};
+      if(hadScores||hadGreen){
+        const extra=(f==='greensomes'||roundData.format==='greensomes')?'\n\n(Greensomes nutzt gemeinsame Scores pro Paar)':'';
+        if(!confirm('Zu '+fmtNames[f]+' wechseln?\n\nAchtung: Scores werden gelöscht!'+extra)) return;
       }
+      roundData.scores=Array.from({length:9},()=>Array(18).fill(0));
+      roundData.greenScores={};
+      if(f==='single') roundData.teams=Array(9).fill(null);
       roundData.format=f;saveRound();render();
     };
   });
