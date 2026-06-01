@@ -137,6 +137,82 @@ let cpOpen=false;
 let cpSearch='';
 let cpRegion='Bad Griesbach';
 
+
+// ─── TEAM FORMAT HELPERS ───────────────────────────────────────────────────
+function getTeamFlights(){
+  const n=settings.numPlayers;
+  const redP=[],blueP=[];
+  for(let i=0;i<n;i++){if(roundData.teams[i]==='red')redP.push(i);else if(roundData.teams[i]==='blue')blueP.push(i);}
+  if(roundData.format==='matchplay'){
+    const f=[];const maxF=Math.min(redP.length,blueP.length,4);
+    for(let i=0;i<maxF;i++)f.push({red:[redP[i]],blue:[blueP[i]]});return f;
+  } else {
+    const f=[];
+    if(redP.slice(0,2).length&&blueP.slice(0,2).length)f.push({red:redP.slice(0,2),blue:blueP.slice(0,2)});
+    if(redP.slice(2,4).length&&blueP.slice(2,4).length)f.push({red:redP.slice(2,4),blue:blueP.slice(2,4)});
+    return f;
+  }
+}
+function calcMatchStatus(rPi,bPi){
+  let redUp=0,played=0;const results=[];
+  for(let h=0;h<18;h++){
+    const rs=roundData.scores[rPi][h],bs=roundData.scores[bPi][h];
+    if(!rs||!bs){results.push(null);continue;}
+    played++;
+    const rNet=rs-getHS(getVorgabe(rPi),h),bNet=bs-getHS(getVorgabe(bPi),h);
+    if(rNet<bNet){redUp++;results.push('red');}else if(bNet<rNet){redUp--;results.push('blue');}else results.push('half');
+  }
+  return{redUp,remaining:18-played,played,results,won:Math.abs(redUp)>18-played};
+}
+function bestNetHole(pis,h){
+  let best=null;
+  for(const pi of pis){const s=roundData.scores[pi][h];if(!s||s<1)continue;const net=s-getHS(getVorgabe(pi),h);if(best===null||net<best)best=net;}
+  return best;
+}
+function calcFourBallStatus(rPis,bPis){
+  let redUp=0,played=0;const results=[];
+  for(let h=0;h<18;h++){
+    const r=bestNetHole(rPis,h),b=bestNetHole(bPis,h);
+    if(r===null||b===null){results.push(null);continue;}
+    played++;
+    if(r<b){redUp++;results.push('red');}else if(b<r){redUp--;results.push('blue');}else results.push('half');
+  }
+  return{redUp,remaining:18-played,played,results,won:Math.abs(redUp)>18-played};
+}
+function calcGreensomesStatus(fi){
+  if(!roundData.greenScores||!roundData.greenScores[fi])return{redUp:0,remaining:18,played:0,results:[],won:false};
+  const gs=roundData.greenScores[fi];let redUp=0,played=0;const results=[];
+  const tf=getTeamFlights()[fi]||{red:[],blue:[]};
+  const rV=tf.red.reduce((s,pi)=>s+getVorgabe(pi),0)/Math.max(tf.red.length,1);
+  const bV=tf.blue.reduce((s,pi)=>s+getVorgabe(pi),0)/Math.max(tf.blue.length,1);
+  for(let h=0;h<18;h++){
+    const rs=gs.red?.[h],bs=gs.blue?.[h];
+    if(!rs||!bs){results.push(null);continue;}
+    played++;
+    const rNet=rs-Math.round(getHS(rV,h)),bNet=bs-Math.round(getHS(bV,h));
+    if(rNet<bNet){redUp++;results.push('red');}else if(bNet<rNet){redUp--;results.push('blue');}else results.push('half');
+  }
+  return{redUp,remaining:18-played,played,results,won:Math.abs(redUp)>18-played};
+}
+function matchLabel(redUp,remaining,won,rName,bName){
+  if(redUp===0)return{text:'All Square',col:'#6a8a6a'};
+  const abs=Math.abs(redUp),name=redUp>0?rName:bName,col=redUp>0?RED:BLUE;
+  return won?{text:`${name} ${abs}&${remaining}`,col}:{text:`${name} ${abs} UP`,col};
+}
+function buildMatchLiveBar(stat,rName,bName){
+  const lbl=matchLabel(stat.redUp,stat.remaining,stat.won,rName,bName);
+  const dots=stat.results.map(r=>`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${r===null?'#1a2e1a':r==='red'?RED:r==='blue'?BLUE:'#4a6a4a'};flex-shrink:0"></span>`).join('');
+  return `<div style="background:rgba(0,0,0,.3);border-radius:10px;padding:9px 11px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:12px;color:${RED};font-weight:700">🔴 ${rName}</span>
+      <span style="font-size:13px;font-weight:700;color:${lbl.col};text-align:center;flex:1;padding:0 6px">${lbl.text}</span>
+      <span style="font-size:12px;color:${BLUE};font-weight:700">${bName} 🔵</span>
+    </div>
+    <div style="display:flex;gap:3px;flex-wrap:wrap">${dots}</div>
+    <div style="font-size:9px;color:#4a6a4a;margin-top:4px;text-align:center">${stat.played} Löcher gespielt · ${stat.remaining} verbleibend</div>
+  </div>`;
+}
+
 // ─── FIREBASE SAVE/LOAD ───────────────────────────────────────────────────
 async function saveSettings(){try{await setDoc(settingsRef,settings);}catch(e){console.error(e);}}
 async function saveRound(){try{await setDoc(roundsRef(roundData.roundNum),roundData);}catch(e){console.error(e);}}
@@ -376,56 +452,134 @@ function buildRoundSetup(){
 
 // ─── GAME SCREEN ──────────────────────────────────────────────────────────
 function buildRoundGame(){
-  const flights=getFlights();
-  const af=Math.min(activeFlight,flights.length-1);
-  const flight=flights[af];
+  const fmt=roundData.format;
+  const isTeam=fmt!=='single';
   const holePar=roundData.pars[activeHole];
-  const isTeam=roundData.format!=='single';
-  const hp=flight.filter(pi=>holesPlayedForPlayer(pi)>0||roundData.scores[pi][activeHole]>0).length;
+
+  // For team formats use team flights, for single use regular flights
+  const teamFlights=isTeam?getTeamFlights():[];
+  const flights=getFlights();
+  const af=Math.min(activeFlight,Math.max(flights.length,teamFlights.length)-1);
+
+  // Current flight players
+  let flight=[];
+  if(isTeam && teamFlights.length>0){
+    const tf=teamFlights[Math.min(af,teamFlights.length-1)];
+    flight=[...tf.red,...tf.blue];
+  } else {
+    flight=flights[Math.min(af,flights.length-1)]||[];
+  }
 
   // Flight tabs
-  const flightTabs=flights.length>1?`<div style="display:flex;border-top:1px solid ${BOR}">
-    ${flights.map((f,fi)=>`<button id="ft-${fi}" style="flex:1;padding:8px 0;border:none;background:${af===fi?'rgba(212,168,67,.12)':'transparent'};color:${af===fi?G:'#4a6a4a'};font-size:11px;font-weight:${af===fi?700:400};border-bottom:2px solid ${af===fi?G:'transparent'};cursor:pointer;font-family:inherit">Flight ${fi+1} (${f.length})</button>`).join('')}
+  const numTabs=isTeam?teamFlights.length:flights.length;
+  const flightTabs=numTabs>1?`<div style="display:flex;border-top:1px solid ${BOR}">
+    ${Array.from({length:numTabs},(_,fi)=>{
+      const tf=isTeam?teamFlights[fi]:null;
+      const label=isTeam?
+        (fmt==='matchplay'?`⚔️ ${settings.players[tf.red[0]]?.name?.split(' ')[0]||'?'} vs ${settings.players[tf.blue[0]]?.name?.split(' ')[0]||'?'}`:`Flight ${fi+1}`)
+        :`Flight ${fi+1}`;
+      return `<button id="ft-${fi}" style="flex:1;padding:7px 2px;border:none;background:${af===fi?'rgba(212,168,67,.12)':'transparent'};color:${af===fi?G:'#4a6a4a'};font-size:10px;font-weight:${af===fi?700:400};border-bottom:2px solid ${af===fi?G:'transparent'};cursor:pointer;font-family:inherit">${label}</button>`;
+    }).join('')}
   </div>`:'';
 
-  // Score cards
-  const cards=flight.map(pi=>{
-    const s=roundData.scores[pi][activeHole];
-    const v=getVorgabe(pi);
-    const rec=getHS(v,activeHole);
-    const pts=s>0?calcStb(s,holePar,rec):null;
-    const net=s>0?s-rec:null;
-    const diff=s>0?s-holePar:null;
-    const team=roundData.teams[pi];
-    const teamCol=team==='red'?RED:team==='blue'?BLUE:PLAYER_COLORS[pi];
-    const pcol=PLAYER_COLORS[pi];
+  // ── Live match status bar (team formats) ──
+  let matchBar='';
+  if(isTeam && teamFlights.length>0){
+    const tf=teamFlights[Math.min(af,teamFlights.length-1)];
+    const rName=tf.red.map(pi=>settings.players[pi]?.name?.split(' ')[0]||'?').join('/');
+    const bName=tf.blue.map(pi=>settings.players[pi]?.name?.split(' ')[0]||'?').join('/');
+    let stat;
+    if(fmt==='matchplay') stat=calcMatchStatus(tf.red[0],tf.blue[0]);
+    else if(fmt==='fourball') stat=calcFourBallStatus(tf.red,tf.blue);
+    else stat=calcGreensomesStatus(Math.min(af,teamFlights.length-1));
+    matchBar=buildMatchLiveBar(stat,rName,bName);
+  }
 
-    // Quick buttons 1-9
-    const qBtns=[1,2,3,4,5,6,7,8,9].map(qv=>{
-      const act=s===qv;
-      return `<button id="q-${pi}-${qv}" style="flex:1;height:36px;border-radius:6px;border:2px solid ${act?pcol:BOR};background:${act?pcol+'33':'#0c180c'};color:${act?pcol:'#5a7a5a'};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">${qv}</button>`;
-    }).join('');
-
-    const statRow=s>0?`<div style="display:flex;gap:10px;margin-top:7px;padding-top:7px;border-top:1px solid #0f1e0f;flex-wrap:wrap;align-items:center">
-      ${roundData.format!=='matchplay'?`<span style="font-size:11px;color:${pts>=3?'#5b8fd4':pts>=2?'#5aaf7a':pts===1?G:'#d45a5a'}">⭐ ${pts} Pkt</span>`:''}
-      <span style="font-size:11px;color:#4a6a4a">Netto <strong style="color:#aaa">${net}</strong></span>
-      <span style="font-size:11px;font-weight:700;color:${diff<0?'#5aaf7a':diff===0?'#6a8a6a':'#d45a5a'}">${diff<=-2?'🦅':diff===-1?'🐦 Birdie':diff===0?'Par':diff===1?'Bogey':'+'+diff}</span>
-    </div>`:'';
-
-    return `<div class="card" style="border:1px solid ${s>0?pcol+'55':BOR};border-left:4px solid ${pcol}${team?';border-right:3px solid '+teamCol:''}">
-      <div style="display:flex;flex-direction:column;gap:7px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="font-size:14px;font-weight:700;color:${pcol}">${settings.players[pi]?.name||''}</div>
+  // ── Score cards ──
+  let cards='';
+  if(fmt==='greensomes'){
+    // Show 2 team pair input cards (one score per pair per hole)
+    const tf=isTeam&&teamFlights.length>0?teamFlights[Math.min(af,teamFlights.length-1)]:{red:[],blue:[]};
+    if(!roundData.greenScores) roundData.greenScores={};
+    const gsKey=Math.min(af,teamFlights.length-1);
+    if(!roundData.greenScores[gsKey]) roundData.greenScores[gsKey]={red:Array(18).fill(0),blue:Array(18).fill(0)};
+    const gs=roundData.greenScores[gsKey];
+    ['red','blue'].forEach(team=>{
+      const pis=tf[team]||[];
+      const s=gs[team][activeHole]||0;
+      const avgV=pis.reduce((sum,pi)=>sum+getVorgabe(pi),0)/Math.max(pis.length,1);
+      const rec=Math.round(getHS(avgV,activeHole));
+      const net=s>0?s-rec:null;
+      const diff=s>0?s-holePar:null;
+      const tcol=team==='red'?RED:BLUE;
+      const names=pis.map(pi=>settings.players[pi]?.name||'').join(' + ');
+      const qBtns=[1,2,3,4,5,6,7,8,9].map(qv=>{
+        const act=s===qv;
+        return `<button id="gs-${team}-${qv}" style="flex:1;height:36px;border-radius:6px;border:2px solid ${act?tcol:BOR};background:${act?tcol+'33':'#0c180c'};color:${act?tcol:'#5a7a5a'};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">${qv}</button>`;
+      }).join('');
+      const statRow=s>0?`<div style="display:flex;gap:10px;margin-top:7px;padding-top:7px;border-top:1px solid #0f1e0f;align-items:center">
+        <span style="font-size:11px;color:#4a6a4a">Netto <strong style="color:#aaa">${net}</strong></span>
+        <span style="font-size:11px;font-weight:700;color:${diff<0?'#5aaf7a':diff===0?'#6a8a6a':'#d45a5a'}">${diff<=-2?'🦅':diff===-1?'🐦':diff===0?'Par':diff===1?'Bogey':'+'+diff}</span>
+        <span style="font-size:9px;color:#4a6a4a;margin-left:auto">Ø Vorgabe ${avgV.toFixed(1)}</span>
+      </div>`:'';
+      cards+=`<div class="card" style="border:1px solid ${s>0?tcol+'55':BOR};border-left:4px solid ${tcol}">
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:13px;font-weight:700;color:${tcol}">${team==='red'?'🔴':'🔵'} ${names}</div>
             <div style="font-size:12px;font-weight:700;color:#5a8a5a">Par ${holePar}</div>
           </div>
-          <div style="font-size:9px;color:#3a5a3a">Vorgabe ${v} · ${rec>0?'+'+rec+' Extra':rec<0?rec+' Schl.':'kein Extra'}</div>
+          <div style="font-size:9px;color:#3a5a3a">Gemeinsamer Score · ${rec>0?'+'+rec+' Extra':rec<0?rec+' Schl.':'kein Extra'}</div>
+          <div style="display:flex;gap:2px">${qBtns}</div>
         </div>
-        <div style="display:flex;gap:2px;align-items:center">${qBtns}</div>
-      </div>
-      ${statRow}
-    </div>`;
-  }).join('');
+        ${statRow}
+      </div>`;
+    });
+  } else {
+    // Individual score cards (single, matchplay, fourball)
+    cards=flight.map(pi=>{
+      const s=roundData.scores[pi][activeHole];
+      const v=getVorgabe(pi);
+      const rec=getHS(v,activeHole);
+      const pts=s>0?calcStb(s,holePar,rec):null;
+      const net=s>0?s-rec:null;
+      const diff=s>0?s-holePar:null;
+      const team=roundData.teams[pi];
+      const teamCol=team==='red'?RED:team==='blue'?BLUE:PLAYER_COLORS[pi];
+      const pcol=PLAYER_COLORS[pi];
+      const qBtns=[1,2,3,4,5,6,7,8,9].map(qv=>{
+        const act=s===qv;
+        return `<button id="q-${pi}-${qv}" style="flex:1;height:36px;border-radius:6px;border:2px solid ${act?pcol:BOR};background:${act?pcol+'33':'#0c180c'};color:${act?pcol:'#5a7a5a'};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">${qv}</button>`;
+      }).join('');
+      // For fourball show best ball indicator
+      let bestBallNote='';
+      if(fmt==='fourball'&&team&&s>0){
+        const tf2=teamFlights.length>0?teamFlights[Math.min(af,teamFlights.length-1)]:{red:[],blue:[]};
+        const teamPis=tf2[team]||[];
+        const myNet=net;
+        const isBest=teamPis.every(p2=>{if(p2===pi)return true;const s2=roundData.scores[p2][activeHole];if(!s2)return true;return myNet<=(s2-getHS(getVorgabe(p2),activeHole));});
+        if(isBest&&teamPis.length>1)bestBallNote=`<span style="font-size:9px;background:${teamCol}22;color:${teamCol};border-radius:4px;padding:1px 5px">🏌️ Best Ball</span>`;
+      }
+      const statRow=s>0?`<div style="display:flex;gap:8px;margin-top:7px;padding-top:7px;border-top:1px solid #0f1e0f;flex-wrap:wrap;align-items:center">
+        ${fmt!=='matchplay'?`<span style="font-size:11px;color:${pts>=3?'#5b8fd4':pts>=2?'#5aaf7a':pts===1?G:'#d45a5a'}">⭐ ${pts} Pkt</span>`:''}
+        <span style="font-size:11px;color:#4a6a4a">Netto <strong style="color:#aaa">${net}</strong></span>
+        <span style="font-size:11px;font-weight:700;color:${diff<0?'#5aaf7a':diff===0?'#6a8a6a':'#d45a5a'}">${diff<=-2?'🦅':diff===-1?'🐦':diff===0?'Par':diff===1?'Bogey':'+'+diff}</span>
+        ${bestBallNote}
+      </div>`:'';
+      return `<div class="card" style="border:1px solid ${s>0?pcol+'55':BOR};border-left:4px solid ${pcol}${team?';border-right:3px solid '+teamCol:''}">
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-size:14px;font-weight:700;color:${pcol}">${settings.players[pi]?.name||''}</div>
+              <div style="font-size:12px;font-weight:700;color:#5a8a5a">Par ${holePar}</div>
+            </div>
+            <div style="font-size:9px;color:#3a5a3a">Vorgabe ${v} · ${rec>0?'+'+rec+' Extra':rec<0?rec+' Schl.':'kein Extra'}</div>
+          </div>
+          <div style="display:flex;gap:2px">${qBtns}</div>
+        </div>
+        ${statRow}
+      </div>`;
+    }).join('');
+  }
 
   // Hole overview
   const holeGrid=(start,end,label)=>`<div style="margin-bottom:8px">
@@ -445,7 +599,17 @@ function buildRoundGame(){
     </div>
   </div>`;
 
-  // Live mini-leaderboard
+  // Live ranking (single/einzel only, for team show match bars)
+  const allLiveMatches=isTeam?teamFlights.map((tf,fi)=>{
+    const rName=tf.red.map(pi=>settings.players[pi]?.name?.split(' ')[0]||'?').join('/');
+    const bName=tf.blue.map(pi=>settings.players[pi]?.name?.split(' ')[0]||'?').join('/');
+    let stat;
+    if(fmt==='matchplay') stat=calcMatchStatus(tf.red[0],tf.blue[0]);
+    else if(fmt==='fourball') stat=calcFourBallStatus(tf.red,tf.blue);
+    else stat=calcGreensomesStatus(fi);
+    return buildMatchLiveBar(stat,rName,bName);
+  }).join(''):null;
+
   const allP=flight.map(pi=>({pi,pts:stbForPlayer(pi),g:grossForPlayer(pi),h:holesPlayedForPlayer(pi)}));
   allP.sort((a,b)=>b.pts-a.pts);
   const lb=allP.map((p,rank)=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;align-items:center">
@@ -455,7 +619,8 @@ function buildRoundGame(){
     <span style="color:${G};font-weight:700">${p.pts} Pkt</span>
   </div>`).join('');
 
-  const finBtn=flight.every(pi=>holesPlayedForPlayer(pi)===18)?`<button id="fin-round" style="width:100%;padding:13px;background:linear-gradient(135deg,#5b8fd4,#3a5898);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:12px;box-shadow:0 4px 16px rgba(91,143,212,.30)">🏆 Runde abschließen</button>`:'';
+  const allDone=flight.every(pi=>holesPlayedForPlayer(pi)===18)||(fmt==='greensomes'&&roundData.greenScores&&Object.values(roundData.greenScores).every(gs=>gs.red.filter(s=>s>0).length===18&&gs.blue.filter(s=>s>0).length===18));
+  const finBtn=allDone?`<button id="fin-round" style="width:100%;padding:13px;background:linear-gradient(135deg,#5b8fd4,#3a5898);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:12px;box-shadow:0 4px 16px rgba(91,143,212,.30)">🏆 Runde abschließen</button>`:'';
 
   return `<div style="position:sticky;top:0;z-index:20;background:rgba(8,18,10,.97);backdrop-filter:blur(12px);border-bottom:1px solid ${BOR}">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 14px">
@@ -470,6 +635,7 @@ function buildRoundGame(){
     ${flightTabs}
   </div>
   <div class="fade" style="max-width:500px;margin:0 auto;padding:10px 12px">
+    ${isTeam?matchBar:''}
     ${cards}
     <div style="display:flex;gap:6px;margin:12px 0 10px">
       <button id="prev-h" style="flex:1;padding:9px;background:#0c180c;border:1px solid ${BOR};border-radius:9px;color:${activeHole===0?'#1a2e1a':'#8a9a7a'};font-size:13px;cursor:${activeHole===0?'default':'pointer'};font-family:inherit">← ${activeHole>0?'Loch '+activeHole:''}</button>
@@ -485,8 +651,8 @@ function buildRoundGame(){
     </div>
     ${finBtn}
     <div style="background:rgba(0,0,0,.25);border-radius:11px;padding:10px">
-      <div style="font-size:8px;color:${G};letter-spacing:3px;margin-bottom:7px;text-transform:uppercase">Live Rangliste</div>
-      ${lb}
+      <div style="font-size:8px;color:${G};letter-spacing:3px;margin-bottom:7px;text-transform:uppercase">${isTeam?'Alle Matches – Überblick':'Live Rangliste'}</div>
+      ${isTeam?allLiveMatches:lb}
     </div>
   </div>`;
 }
@@ -869,6 +1035,24 @@ function attachAll(){
       if(el)el.onclick=()=>{roundData.scores[pi][activeHole]=qv;saveRound();render();};
     });
   });
+  // Greensomes team score buttons
+  if(roundData.format==='greensomes'){
+    const teamFlights=getTeamFlights();
+    const gsIdx=Math.min(activeFlight,teamFlights.length-1);
+    if(!roundData.greenScores) roundData.greenScores={};
+    if(!roundData.greenScores[gsIdx]) roundData.greenScores[gsIdx]={red:Array(18).fill(0),blue:Array(18).fill(0)};
+    ['red','blue'].forEach(team=>{
+      [1,2,3,4,5,6,7,8,9].forEach(qv=>{
+        const el=document.getElementById(`gs-${team}-${qv}`);
+        if(el)el.onclick=()=>{
+          if(!roundData.greenScores) roundData.greenScores={};
+          if(!roundData.greenScores[gsIdx]) roundData.greenScores[gsIdx]={red:Array(18).fill(0),blue:Array(18).fill(0)};
+          roundData.greenScores[gsIdx][team][activeHole]=qv;
+          saveRound();render();
+        };
+      });
+    });
+  }
 
   // Hole dots
   for(let h=0;h<18;h++){
