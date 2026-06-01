@@ -456,22 +456,17 @@ function buildRoundGame(){
   const isTeam=fmt!=='single';
   const holePar=roundData.pars[activeHole];
 
-  // For team formats use team flights, for single use regular flights
+  // Always use regular flights for score display – ALL players can enter scores
+  // Team assignments only affect match calculation
   const teamFlights=isTeam?getTeamFlights():[];
   const flights=getFlights();
-  const af=Math.min(activeFlight,Math.max(flights.length,teamFlights.length)-1);
-
-  // Current flight players
-  let flight=[];
-  if(isTeam && teamFlights.length>0){
-    const tf=teamFlights[Math.min(af,teamFlights.length-1)];
-    flight=[...tf.red,...tf.blue];
-  } else {
-    flight=flights[Math.min(af,flights.length-1)]||[];
-  }
+  const numTeamF=teamFlights.length||flights.length;
+  const af=Math.min(activeFlight,Math.max(flights.length,numTeamF)-1);
+  // ALWAYS use regular flights for showing player score cards
+  const flight=flights[Math.min(af,flights.length-1)]||[];
 
   // Flight tabs
-  const numTabs=isTeam?teamFlights.length:flights.length;
+  const numTabs=flights.length; // always use regular flights for tabs
   const flightTabs=numTabs>1?`<div style="display:flex;border-top:1px solid ${BOR}">
     ${Array.from({length:numTabs},(_,fi)=>{
       const tf=isTeam?teamFlights[fi]:null;
@@ -964,10 +959,26 @@ function attachAll(){
     };
   });
 
-  // Format
+  // Format – ask before clearing when switching to single
   ['single','matchplay','fourball','greensomes'].forEach(f=>{
     const el=document.getElementById('fmt-'+f);
-    if(el)el.onclick=()=>{roundData.format=f;saveRound();render();};
+    if(el)el.onclick=()=>{
+      const hadScores=roundData.scores.some(ps=>ps.some(s=>s>0));
+      if(f==='single'&&roundData.format!=='single'&&hadScores){
+        if(!confirm('Zum Einzel-Format wechseln?
+
+Achtung: Die Team-Scores werden gelöscht!')) return;
+        roundData.scores=Array.from({length:9},()=>Array(18).fill(0));
+        roundData.greenScores={};
+        roundData.teams=Array(9).fill(null);
+      } else if(f!=='single'&&roundData.format==='single'&&hadScores){
+        if(!confirm('Zum Team-Format wechseln?
+
+Achtung: Die Einzel-Scores werden gelöscht!')) return;
+        roundData.scores=Array.from({length:9},()=>Array(18).fill(0));
+      }
+      roundData.format=f;saveRound();render();
+    };
   });
 
   // Num players
@@ -1026,10 +1037,11 @@ function attachAll(){
     if(el)el.onclick=()=>{activeFlight=fi;render();};
   });
 
-  // Score quick buttons
-  const flights=getFlights();
-  const af=Math.min(activeFlight,flights.length-1);
-  flights[af]?.forEach(pi=>{
+  // Score quick buttons – ALL players in current regular flight
+  const regularFlights=getFlights();
+  const afEv=Math.min(activeFlight,regularFlights.length-1);
+  const activePis=regularFlights[Math.min(afEv,regularFlights.length-1)]||[];
+  activePis.forEach(pi=>{
     [1,2,3,4,5,6,7,8,9].forEach(qv=>{
       const el=document.getElementById(`q-${pi}-${qv}`);
       if(el)el.onclick=()=>{roundData.scores[pi][activeHole]=qv;saveRound();render();};
