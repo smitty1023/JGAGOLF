@@ -318,13 +318,7 @@ function buildSetup(){
   }
 
   const cpFilt=cpOpen?COURSES.filter(c=>c.name.toLowerCase().includes('')):'';
-  const cpList=cpOpen?`<div style="background:#0c180c;border:1px solid ${BOR};border-radius:10px;overflow:hidden;margin-top:6px">
-    <div style="max-height:180px;overflow-y:auto">
-      ${COURSES.map((c,i)=>`<button id="cp-${i}" style="width:100%;text-align:left;padding:8px 12px;background:${RD.courseName===c.name?'rgba(212,168,67,.10)':'transparent'};border:none;border-bottom:1px solid #0f1e0f;cursor:pointer;font-family:inherit;display:block">
-        <div style="font-size:12px;color:${RD.courseName===c.name?G:'#d8d0c0'};font-weight:${RD.courseName===c.name?700:400}">${c.name}</div>
-        <div style="font-size:9px;color:#4a6a4a">CR ${c.cr} · Slope ${c.slope} · Par ${c.par.reduce((a,b)=>a+b,0)}</div>
-      </button>').join(\'\')}
-    </div>
+  const cpList=cpOpen?('<div style="background:#0c180c;border:1px solid '+BOR+';border-radius:10px;overflow:hidden;margin-top:6px"><div style="max-height:180px;overflow-y:auto">'+COURSES.map((c,i)=>'<button id="cp-'+i+'" style="width:100%;text-align:left;padding:8px 12px;background:'+(RD.courseName===c.name?'rgba(212,168,67,.10)':'transparent')+';border:none;border-bottom:1px solid #0f1e0f;cursor:pointer;font-family:inherit;display:block"><div style="font-size:12px;color:'+(RD.courseName===c.name?G:'#d8d0c0')+';font-weight:'+(RD.courseName===c.name?700:400)+'">'+c.name+'</div><div style="font-size:9px;color:#4a6a4a">CR '+c.cr+' · Slope '+c.slope+' · Par '+c.par.reduce((a,b)=>a+b,0)+'</div></button>').join('')+'</div></div>'):''
   </div>':'';
 
   const chkEinzel=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
