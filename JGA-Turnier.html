@@ -311,6 +311,7 @@ function App(){
                 var newRD=Object.assign({},RD,{format:f[0],scores:Array.from({length:9},function(){return Array(18).fill(0);}),greenScores:{}});
                 setRD(newRD);saveRD(newRD);
                 if(f[0]!=='single'){setTsMode(f[0]);setShowTS(true);}
+                else{setTsMode('');setShowTS(false);}
               },style:{flex:'1',padding:'9px 3px',border:'2px solid '+(act?G:BOR),borderRadius:'9px',background:act?'rgba(212,168,67,.10)':'#0c180c',color:act?G:'#4a6a4a',fontFamily:'inherit',fontSize:'10px',fontWeight:act?'700':'400',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:'2px'}},
                 h('span',{style:{fontSize:'16px'}},f[1]),f[2]
               );
@@ -381,6 +382,7 @@ function App(){
             )
           )
         ),
+        isTeam && h('button',{onClick:function(){setTsMode(fmt);setShowTS(true);},style:{width:'100%',padding:'12px',marginBottom:'10px',background:'rgba(212,168,67,.10)',border:'1px solid '+G,borderRadius:'12px',color:G,fontSize:'14px',fontFamily:'inherit',fontWeight:'700',cursor:'pointer'}},'👥 Teams & Flights einstellen'),
         h('button',{onClick:function(){setScreen('game');setCurHole(0);setCurFlight(0);},style:{width:'100%',padding:'15px',background:'linear-gradient(135deg,'+G+',#a07830)',border:'none',borderRadius:'12px',color:'#050d05',fontSize:'16px',fontFamily:'inherit',fontWeight:'700',letterSpacing:'2px',cursor:'pointer'}},'⛳ Runde starten')
       )
     );
@@ -436,7 +438,7 @@ function App(){
                 h('div',{style:{fontSize:'9px',color:'#3a5a3a',marginBottom:'7px'}},rec>0?'+'+rec+' Extra':'kein Extra'),
                 h('div',{style:{display:'flex',gap:'2px'}},
                   [1,2,3,4,5,6,7,8,9].map(function(qv){
-                    return h('div',{key:qv,onClick:function(){upGreenScore(fi3,team,curHole,qv);},style:{flex:'1',height:'36px',borderRadius:'6px',border:'2px solid '+(s===qv?tcol:BOR),background:s===qv?tcol+'33':'#0c180c',color:s===qv?tcol:'#5a7a5a',fontSize:'12px',fontWeight:'700',cursor:'pointer',textAlign:'center',lineHeight:'32px'}},String(qv));
+                    return h('div',{key:qv,onClick:(function(fii,tt,hh,vv){return function(){upGreenScore(fii,tt,hh,vv);};})(fi3,team,curHole,qv),style:{flex:'1',height:'36px',borderRadius:'6px',border:'2px solid '+(s===qv?tcol:BOR),background:s===qv?tcol+'33':'#0c180c',color:s===qv?tcol:'#5a7a5a',fontSize:'12px',fontWeight:'700',cursor:'pointer',textAlign:'center',lineHeight:'32px'}},String(qv));
                   })
                 ),
                 s>0&&net!==null&&diff!==null && h('div',{style:{display:'flex',gap:'10px',marginTop:'7px',paddingTop:'7px',borderTop:'1px solid #0f1e0f'}},
@@ -462,7 +464,7 @@ function App(){
                 ),
                 h('div',{style:{display:'flex',gap:'2px'}},
                   [1,2,3,4,5,6,7,8,9].map(function(qv){
-                    return h('div',{key:qv,onClick:function(){upRDScores(pi,curHole,qv);},style:{flex:'1',height:'36px',borderRadius:'6px',border:'2px solid '+(s===qv?pcol2:BOR),background:s===qv?pcol2+'33':'#0c180c',color:s===qv?pcol2:'#5a7a5a',fontSize:'12px',fontWeight:'700',cursor:'pointer',textAlign:'center',lineHeight:'32px'}},String(qv));
+                    return h('div',{key:qv,onClick:(function(pii,hh,vv){return function(){upRDScores(pii,hh,vv);};})(pi,curHole,qv),style:{flex:'1',height:'36px',borderRadius:'6px',border:'2px solid '+(s===qv?pcol2:BOR),background:s===qv?pcol2+'33':'#0c180c',color:s===qv?pcol2:'#5a7a5a',fontSize:'12px',fontWeight:'700',cursor:'pointer',textAlign:'center',lineHeight:'32px'}},String(qv));
                   })
                 ),
                 s>0&&pts!==null&&net!==null&&diff!==null && h('div',{style:{display:'flex',gap:'8px',marginTop:'7px',paddingTop:'7px',borderTop:'1px solid #0f1e0f',flexWrap:'wrap',alignItems:'center'}},
@@ -496,7 +498,7 @@ function App(){
           })
         ),
         // Finish button
-        flight.every(function(pi){return getHoles(RD,pi)===18;}) && h('button',{onClick:function(){setScreen('results');},style:{width:'100%',padding:'12px',background:'linear-gradient(135deg,#5b8fd4,#3a5898)',border:'none',borderRadius:'11px',color:'#fff',fontSize:'14px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',marginBottom:'12px'}},'🏆 Runde abschließen'),
+        h('button',{onClick:function(){setScreen('results');},style:{width:'100%',padding:'12px',background:'linear-gradient(135deg,#5b8fd4,#3a5898)',border:'none',borderRadius:'11px',color:'#fff',fontSize:'14px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',marginBottom:'12px'}},'📊 Wertung & Abschließen'),
         // Bottom
         h('div',{style:{background:'rgba(0,0,0,.25)',borderRadius:'11px',padding:'10px'}},
           isTeam && teamFlights.filter(function(f){return f.red.length&&f.blue.length;}).length>0
