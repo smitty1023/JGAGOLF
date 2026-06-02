@@ -230,8 +230,8 @@ function matchBar(stat,rName,bName){
   const up=stat.up,rem=stat.remaining,won=stat.won;
   let txt,col;
   if(up===0){txt='All Square';col='#6a8a6a';}
-  else{const abs=Math.abs(up),n=up>0?rName:bName;col=up>0?RED:BLUE;txt=won?`${n} ${abs}&${rem}`:`${n} ${abs} UP`;}
-  const dots=stat.res.map(r=>`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${r===null?'#1a2e1a':r==='red'?RED:r==='blue'?BLUE:'#4a6a4a'}"></span>`).join('');
+  else{const abs=Math.abs(up),n=up>0?rName:bName;col=up>0?RED:BLUE;txt=won?(n+' '+abs+'&'+rem):(n+' '+abs+' UP');}
+  const dots=stat.res.map(r=>'<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+(r===null?'#1a2e1a':r==='red'?RED:r==='blue'?BLUE:'#4a6a4a')+'"></span>').join('');
   return `<div style="background:rgba(0,0,0,.3);border-radius:10px;padding:9px 11px;margin-bottom:8px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
       <span style="font-size:12px;color:${RED};font-weight:700">🔴 ${rName}</span>
@@ -251,7 +251,7 @@ function render(){
 
 function buildPage(){
   const tabs=[['round','⛳','Runde'],['einzel','👤','Einzel'],['team','🔴','Team'],['chat','💬','Chat']];
-  const nav=`<nav class="nav">${tabs.map(([t,ic,l])=>`<button class="nb${tab===t?' on':''}" id="nav-${t}"><span class="ic">${ic}</span>${l}</button>`).join('')}</nav>`;
+  const nav='<nav class="nav">'+tabs.map(([t,ic,l])=>'<button class="nb'+(tab===t?' on':'')+'" id="nav-'+t+'"><span class="ic">'+ic+'</span>'+l+'</button>').join('')+'</nav>';
   let content='';
   if(tab==='round')content=screen==='setup'?buildSetup():screen==='game'?buildGame():buildResults();
   else if(tab==='einzel')content=buildEinzel();
