@@ -448,15 +448,30 @@ function buildTeamSetupOverlay(){
 function buildGame(){
   const fmt=RD.format;
   const isTeam=fmt!=='single';
-  const flights=getFlights();
-  const af=Math.min(curFlight,flights.length-1);
-  const flight=flights[af];
   const holePar=RD.pars[curHole];
   const teamFlights=isTeam?getTeamFlights():[];
 
-  // Flight tabs
-  const flightTabs=flights.length>1?`<div style="display:flex;border-top:1px solid ${BOR}">
-    ${flights.map((f,fi)=>`<button id="ft-${fi}" style="flex:1;padding:7px 2px;border:none;background:${af===fi?'rgba(212,168,67,.12)':'transparent'};color:${af===fi?G:'#4a6a4a'};font-size:10px;font-weight:${af===fi?700:400};border-bottom:2px solid ${af===fi?G:'transparent'};cursor:pointer;font-family:inherit">Flight ${fi+1}</button>`).join('')}
+  // For team formats: use team flights for display (1v1 or 2v2 per flight)
+  // For single: use regular flights (3-4 per flight)
+  const displayFlights=isTeam&&teamFlights.length>0
+    ? teamFlights.map(tf=>[...tf.red,...tf.blue])
+    : getFlights();
+
+  const af=Math.min(curFlight,displayFlights.length-1);
+  const flight=displayFlights[af];
+
+  // Flight tabs - label depends on format
+  const flightTabs=displayFlights.length>1?`<div style="display:flex;border-top:1px solid ${BOR};overflow-x:auto">
+    ${displayFlights.map((f,fi)=>{
+      const tf=isTeam?teamFlights[fi]:null;
+      let label='Flight '+(fi+1);
+      if(fmt==='matchplay'&&tf&&tf.red.length&&tf.blue.length){
+        label=`${pshort(tf.red[0])} vs ${pshort(tf.blue[0])}`;
+      } else if((fmt==='fourball'||fmt==='greensomes')&&tf){
+        label=`🔴${tf.red.map(pi=>pshort(pi)).join('/')} vs ${tf.blue.map(pi=>pshort(pi)).join('/')}🔵`;
+      }
+      return `<button id="ft-${fi}" style="flex:1;min-width:80px;padding:7px 4px;border:none;background:${af===fi?'rgba(212,168,67,.12)':'transparent'};color:${af===fi?G:'#4a6a4a'};font-size:9px;font-weight:${af===fi?700:400};border-bottom:2px solid ${af===fi?G:'transparent'};cursor:pointer;font-family:inherit;white-space:nowrap">${label}</button>`;
+    }).join('')}
   </div>`:'';
 
   // Match bar for current flight (team formats)
@@ -904,11 +919,17 @@ function attachEvents(){
   const goRes=document.getElementById('go-res');if(goRes)goRes.onclick=()=>{screen='results';render();};
 
   // Flight tabs
-  getFlights().forEach((_,fi)=>{const el=document.getElementById('ft-'+fi);if(el)el.onclick=()=>{curFlight=fi;render();};});
+  const ftTeamFl=RD.format!=='single'?getTeamFlights():[];
+  const ftCount=RD.format!=='single'&&ftTeamFl.length>0?ftTeamFl.length:getFlights().length;
+  Array.from({length:ftCount},(_,fi)=>{const el=document.getElementById('ft-'+fi);if(el)el.onclick=()=>{curFlight=fi;render();};});
 
-  // Score buttons – all players in current flight
-  const flights=getFlights();const af=Math.min(curFlight,flights.length-1);
-  const flightPis=flights[af]||[];
+  // Score buttons – all players in current display flight
+  const teamFl=RD.format!=='single'?getTeamFlights():[];
+  const dispFl=RD.format!=='single'&&teamFl.length>0
+    ? teamFl.map(tf=>[...tf.red,...tf.blue])
+    : getFlights();
+  const af2=Math.min(curFlight,dispFl.length-1);
+  const flightPis=dispFl[af2]||[];
   flightPis.forEach(pi=>{
     [1,2,3,4,5,6,7,8,9].forEach(qv=>{
       const el=document.getElementById('q-'+pi+'-'+qv);
@@ -918,7 +939,7 @@ function attachEvents(){
 
   // Greensomes team score buttons
   if(RD.format==='greensomes'){
-    const tf=getTeamFlights();const fi2=Math.min(curFlight,tf.length-1);
+    const tf=getTeamFlights();const fi2=Math.min(curFlight,Math.max(tf.length-1,0));
     if(!RD.greenScores)RD.greenScores={};
     if(!RD.greenScores[fi2])RD.greenScores[fi2]={red:Array(18).fill(0),blue:Array(18).fill(0)};
     ['red','blue'].forEach(team=>{
