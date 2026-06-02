@@ -25,9 +25,12 @@ input[type=number]{-moz-appearance:textfield}
 <div id="root"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script type="module">
-import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import{getFirestore,doc,collection,setDoc,getDoc,onSnapshot,addDoc,serverTimestamp,query,orderBy}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+<script>
+(async function(){
+var fbMod=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
+var fsMod=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+var initializeApp=fbMod.initializeApp;
+var getFirestore=fsMod.getFirestore,doc=fsMod.doc,collection=fsMod.collection,setDoc=fsMod.setDoc,getDoc=fsMod.getDoc,onSnapshot=fsMod.onSnapshot,addDoc=fsMod.addDoc,serverTimestamp=fsMod.serverTimestamp,query=fsMod.query,orderBy=fsMod.orderBy;
 
 var h=React.createElement;
 var useState=React.useState;
@@ -412,7 +415,6 @@ function App(){
 
   // ── GAME
   function buildGame(){
-    try{
     if(!RD.scores||!RD.pars)return h('div',{style:{padding:'20px',color:'#d45a5a'}},'Lade...');
     var holePar=RD.pars[curHole]||4;
     return h('div',{className:'fade'},
@@ -556,8 +558,6 @@ function App(){
     );
   }
 
-  }catch(e){console.error('buildGame error:',e);return h('div',{style:{padding:'20px',color:'#d45a5a',background:BG,minHeight:'100vh'}},'Fehler: '+e.message);}
-  }
 
   // ── RESULTS
   function buildResults(){
@@ -879,10 +879,19 @@ function App(){
   else if(tab==='team'){content=buildTeam();}
   else {content=buildChat();}
 
-  return h('div',{id:'appwrap',style:{background:BG,minHeight:'100vh'}},content,showTS&&buildTeamSetup(),navEl);
+  try{
+    return h('div',{id:'appwrap',style:{background:BG,minHeight:'100vh'}},content,showTS&&buildTeamSetup(),navEl);
+  }catch(e){
+    return h('div',{style:{padding:'20px',color:'#d45a5a',background:BG,minHeight:'100vh',fontFamily:'monospace',fontSize:'12px'}},
+      h('div',{style:{fontSize:'20px',marginBottom:'10px'}},'⚠️ Fehler'),
+      h('div',null,String(e.message)),
+      h('div',{style:{marginTop:'10px',fontSize:'10px',color:'#4a6a4a'}},String(e.stack||'').slice(0,300))
+    );
+  }
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+})();
 </script>
 </body>
 </html>
