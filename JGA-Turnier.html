@@ -277,7 +277,14 @@ function buildSetup(){
   const course=COURSES.find(c=>c.name===RD.courseName)||COURSES[0];
   const isTeam=RD.format!=='single';
 
-  const rndBtns=[1,2,3,4,5].map(r=>`<button id="sr-${r}" style="flex:1;padding:8px 0;border:2px solid ${RD.roundNum===r?G:BOR};border-radius:8px;background:${RD.roundNum===r?'rgba(212,168,67,.12)':'#0c180c'};color:${RD.roundNum===r?G:'#4a6a4a'};font-family:inherit;font-size:12px;font-weight:${RD.roundNum===r?700:400};cursor:pointer">${r}</button>`).join('');
+  const rndBtns=[1,2,3,4,5].map(r=>{
+    const isLocked=allRounds[r]?.locked;
+    const isCur=RD.roundNum===r;
+    return `<button id="sr-${r}" style="flex:1;padding:8px 0;border:2px solid ${isCur?G:isLocked?'#2a4a2a':BOR};border-radius:8px;background:${isCur?'rgba(212,168,67,.12)':isLocked?'rgba(90,175,122,.06)':'#0c180c'};color:${isCur?G:isLocked?'#5aaf7a':'#4a6a4a'};font-family:inherit;font-size:11px;font-weight:${isCur?700:400};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px">
+      <span>${r}</span>
+      <span style="font-size:9px">${isLocked?'🔒':''}</span>
+    </button>`;
+  }).join('');
 
   const fmtBtns=[['single','👤','Einzel'],['matchplay','⚔️','Match Play'],['fourball','🏌️','Four-Ball'],['greensomes','🔄','Greensomes']].map(([f,ic,l])=>`<button id="fmt-${f}" style="flex:1;padding:9px 3px;border:2px solid ${RD.format===f?G:BOR};border-radius:9px;background:${RD.format===f?'rgba(212,168,67,.10)':'#0c180c'};color:${RD.format===f?G:'#4a6a4a'};font-family:inherit;font-size:10px;font-weight:${RD.format===f?700:400};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${ic}</span>${l}</button>`).join('');
 
@@ -328,9 +335,10 @@ function buildSetup(){
   return `${hero('RUNDEN-SETUP')}
   <div class="fade" style="max-width:540px;margin:0 auto;padding:14px 13px 20px">
 
-    <div style="background:rgba(91,143,212,.07);border:1px solid #1a2e4a;border-radius:9px;padding:8px 12px;margin-bottom:14px;display:flex;align-items:center;gap:8px">
+    <div style="background:rgba(91,143,212,.07);border:1px solid #1a2e4a;border-radius:9px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px">
       <span>🔴</span><div style="font-size:10px;color:#5b8fd4;font-weight:700">Live-Sync aktiv – alle Scores geteilt</div>
     </div>
+    <div id="setup-locked-banner"></div>
 
     <div style="margin-bottom:14px">
       <div class="lbl">Runde</div>
@@ -646,7 +654,7 @@ function buildResults(){
   <div class="fade" style="max-width:560px;margin:0 auto;padding:16px 13px 20px">
     <div class="lbl">Runde ${RD.roundNum} – Ergebnis</div>
     ${rows}
-    <button id="save-fin" style="width:100%;padding:12px;background:linear-gradient(135deg,#5aaf7a,#2a7a4a);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px">💾 Runde speichern & abschließen</button>
+    <div id="results-action"></div>
   </div>`;
 }
 
@@ -707,7 +715,21 @@ function buildEinzel(){
 
 // ─── TEAM TAB ─────────────────────────────────────────────────────────────
 function buildTeam(){
-  const r=teamOv.red||0,b=teamOv.blue||0,tot=r+b||1;
+  // Calculate live team points from current round
+  let liveR=0,liveB=0;
+  if(!RD.finalized&&RD.format!=='single'){
+    const tf=getTeamFlights();
+    tf.filter(f=>f.red.length&&f.blue.length).forEach((f,fi)=>{
+      const stat=matchStat(RD.format,fi);
+      stat.res.forEach(rs=>{if(rs==='red')liveR++;else if(rs==='blue')liveB++;else if(rs==='half'){liveR+=0.5;liveB+=0.5;}});
+    });
+    const tot2=liveR+liveB||1;
+    // Normalize live to fraction of match points
+    liveR=parseFloat((liveR/tot2).toFixed(1));
+    liveB=parseFloat((liveB/tot2).toFixed(1));
+  }
+  const savedR=teamOv.red||0,savedB=teamOv.blue||0;
+  const r=parseFloat((savedR+liveR).toFixed(1)),b=parseFloat((savedB+liveB).toFixed(1)),tot=r+b||1;
   const bar=`<div style="background:#0c180c;border-radius:20px;height:14px;overflow:hidden;margin:10px 0">
     <div style="display:flex;height:100%">
       <div style="width:${(r/tot*100).toFixed(1)}%;background:${RED};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;transition:width .5s">${r>0?r:''}</div>
@@ -758,12 +780,14 @@ function buildTeam(){
         <div style="font-size:22px;margin-bottom:3px">🔴</div>
         <div style="font-size:12px;color:${RED};font-weight:700;margin-bottom:5px">Team Rot</div>
         <div style="font-size:34px;font-weight:700;color:${RED}">${r}</div>
+        ${liveR>0?`<div style="font-size:9px;color:#d45a5a;margin-top:2px">inkl. +${liveR} live</div>`:''}
         <div style="font-size:9px;color:#8a4a4a">Punkte</div>
       </div>
       <div style="background:rgba(90,122,212,.10);border:2px solid ${BLUE}44;border-radius:14px;padding:14px;text-align:center">
         <div style="font-size:22px;margin-bottom:3px">🔵</div>
         <div style="font-size:12px;color:${BLUE};font-weight:700;margin-bottom:5px">Team Blau</div>
         <div style="font-size:34px;font-weight:700;color:${BLUE}">${b}</div>
+        ${liveB>0?`<div style="font-size:9px;color:#5a7ad4;margin-top:2px">inkl. +${liveB} live</div>`:''}
         <div style="font-size:9px;color:#4a4a8a">Punkte</div>
       </div>
     </div>
@@ -835,8 +859,13 @@ function attachEvents(){
       await saveRound();
       RD.roundNum=r;
       const snap=await getDoc(rndsRef(r));
-      if(snap.exists())Object.assign(RD,snap.data(),{roundNum:r});
-      else{RD.scores=Array.from({length:9},()=>Array(18).fill(0));RD.greenScores={};RD.finalized=false;}
+      if(snap.exists()){
+        Object.assign(RD,snap.data(),{roundNum:r});
+        allRounds[r]=snap.data();
+      } else {
+        RD.scores=Array.from({length:9},()=>Array(18).fill(0));
+        RD.greenScores={};RD.finalized=false;RD.locked=false;
+      }
       render();
     };
   });
@@ -912,6 +941,28 @@ function attachEvents(){
 
   // Start round
   const startBtn=document.getElementById('start-btn');if(startBtn)startBtn.onclick=()=>{screen='game';curHole=0;curFlight=0;render();};
+  const goResSetup=document.getElementById('go-res-setup');if(goResSetup)goResSetup.onclick=()=>{screen='results';render();};
+
+  // Inject locked banners dynamically (avoids nested backtick issue)
+  const setupBanner=document.getElementById('setup-locked-banner');
+  if(setupBanner){
+    if(RD.locked){
+      setupBanner.innerHTML='<div style="background:rgba(90,175,122,.08);border:1px solid #2a5a2a;border-radius:9px;padding:10px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;color:#5aaf7a;font-weight:700">\uD83D\uDD12 Runde '+RD.roundNum+' ist gesperrt</div><div style="font-size:9px;color:#3a5a3a;margin-top:2px">Ergebnisse sicher gespeichert</div></div><button id="go-res-setup" style="padding:7px 10px;background:rgba(212,168,67,.12);border:1px solid #d4a843;border-radius:7px;color:#d4a843;font-size:10px;cursor:pointer;font-family:inherit">\uD83D\uDCCA Wertung</button></div>';
+      document.getElementById('go-res-setup')?.addEventListener('click',()=>{screen='results';render();});
+    }
+  }
+
+  const resAction=document.getElementById('results-action');
+  if(resAction){
+    if(RD.locked){
+      resAction.innerHTML='<div style="background:rgba(90,175,122,.08);border:1px solid #2a4a2a;border-radius:10px;padding:12px 14px;margin-top:8px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;color:#5aaf7a;font-weight:700">\uD83D\uDD12 Runde '+RD.roundNum+' ist gesperrt</div><div style="font-size:10px;color:#3a5a3a;margin-top:2px">Ergebnisse sind sicher gespeichert</div></div><button id="unlock-round" style="padding:7px 12px;background:rgba(212,68,68,.12);border:1px solid #5a2a2a;border-radius:8px;color:#d45a5a;font-size:11px;cursor:pointer;font-family:inherit">\uD83D\uDD13 Entsperren</button></div>';
+    } else {
+      resAction.innerHTML='<button id="save-fin" style="width:100%;padding:12px;background:linear-gradient(135deg,#5aaf7a,#2a7a4a);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px">\uD83D\uDD12 Runde abschlie\xDFen & sperren</button>';
+    }
+    // Re-attach handlers for dynamically inserted buttons
+    document.getElementById('save-fin')?.addEventListener('click', saveFinalHandler);
+    document.getElementById('unlock-round')?.addEventListener('click', unlockHandler);
+  }
 
   // Back buttons
   const backSetup=document.getElementById('back-setup');if(backSetup)backSetup.onclick=()=>{screen='setup';render();};
@@ -962,10 +1013,9 @@ function attachEvents(){
   // Finish round
   const finBtn=document.getElementById('fin-round');if(finBtn)finBtn.onclick=()=>{screen='results';render();};
 
-  // Save & finalize
-  const saveFin=document.getElementById('save-fin');
-  if(saveFin)saveFin.onclick=async()=>{
-    RD.finalized=true;RD.players=dc(sett.players);
+  // Save & finalize – named function for dynamic re-attach
+  async function saveFinalHandler(){
+    RD.finalized=true;RD.locked=true;RD.players=dc(sett.players);
     await saveRound();
     allRounds[RD.roundNum]=dc(RD);
     // Team points if team format
@@ -992,6 +1042,21 @@ function attachEvents(){
     }
     screen='setup';render();
     alert('✅ Runde '+RD.roundNum+' gespeichert!');
+  }
+  const saveFin=document.getElementById('save-fin');
+  if(saveFin)saveFin.onclick=saveFinalHandler;
+
+  // Unlock round
+  const unlockBtn=document.getElementById('unlock-round');
+  if(unlockBtn)unlockBtn.onclick=async()=>{
+    if(confirm('Runde '+RD.roundNum+' entsperren?
+
+Die Ergebnisse können dann wieder geändert werden.')){
+      RD.locked=false;RD.finalized=false;
+      await saveRound();
+      allRounds[RD.roundNum]=dc(RD);
+      render();
+    }
   };
 
   // Team reset
