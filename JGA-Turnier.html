@@ -59,9 +59,9 @@ function pname(sett,pi){return (sett.players[pi]&&sett.players[pi].name)||'?';}
 function pshort(sett,pi){return pname(sett,pi).split(' ')[0].slice(0,8);}
 function pc(pi){return PC[pi]||G;}
 function getV(sett,RD,pi){return vg((sett.players[pi]&&sett.players[pi].hcp)||18,RD.cr,RD.sr,RD.pars);}
-function getStb(sett,RD,pi){return RD.scores[pi].reduce(function(sum,sc,hh){return sum+(sc>0?stb(sc,RD.pars[hh],hs(getV(sett,RD,pi),hh)):0);},0);}
-function getGross(RD,pi){return RD.scores[pi].reduce(function(a,s){return a+(s||0);},0);}
-function getHoles(RD,pi){return RD.scores[pi].filter(function(s){return s>0;}).length;}
+function getStb(sett,RD,pi){var sc=RD.scores&&RD.scores[pi]||[];return sc.reduce(function(sum,s,hh){return sum+(s>0?stb(s,(RD.pars&&RD.pars[hh])||4,hs(getV(sett,RD,pi),hh)):0);},0);}
+function getGross(RD,pi){var sc=RD.scores&&RD.scores[pi]||[];return sc.reduce(function(a,s){return a+(s||0);},0);}
+function getHoles(RD,pi){var sc=RD.scores&&RD.scores[pi]||[];return sc.filter(function(s){return s>0;}).length;}
 
 function getFlights(n){
   if(n<=4)return [[0,1,2,3].slice(0,n)];
@@ -191,8 +191,30 @@ function App(){
   function saveTV(v){setDoc(teamOvRef,v).catch(function(){});}
 
   function upRD(patch){setRD(function(prev){var next=Object.assign({},prev,patch);saveRD(next);return next;});}
-  function upRDScores(pi,hh,val){setRD(function(prev){var next=dc(prev);next.scores[pi][hh]=val;saveRD(next);return next;});}
-  function upGreenScore(fi,team,hh,val){setRD(function(prev){var next=dc(prev);if(!next.greenScores)next.greenScores={};if(!next.greenScores[fi])next.greenScores[fi]={red:Array(18).fill(0),blue:Array(18).fill(0)};next.greenScores[fi][team][hh]=val;saveRD(next);return next;});}
+  function upRDScores(pi,hh,val){
+    setRD(function(prev){
+      try{
+        var next=dc(prev);
+        if(!next.scores[pi])next.scores[pi]=Array(18).fill(0);
+        next.scores[pi][hh]=val;
+        saveRD(next);
+        return next;
+      }catch(e){console.error('upRDScores error:',e);return prev;}
+    });
+  }
+  function upGreenScore(fi,team,hh,val){
+    setRD(function(prev){
+      try{
+        var next=dc(prev);
+        if(!next.greenScores)next.greenScores={};
+        if(!next.greenScores[fi])next.greenScores[fi]={red:Array(18).fill(0),blue:Array(18).fill(0)};
+        if(!next.greenScores[fi][team])next.greenScores[fi][team]=Array(18).fill(0);
+        next.greenScores[fi][team][hh]=val;
+        saveRD(next);
+        return next;
+      }catch(e){console.error('upGreenScore error:',e);return prev;}
+    });
+  }
 
   useEffect(function(){
     var unsubs=[];
@@ -390,7 +412,9 @@ function App(){
 
   // ── GAME
   function buildGame(){
-    var holePar=RD.pars[curHole];
+    try{
+    if(!RD.scores||!RD.pars)return h('div',{style:{padding:'20px',color:'#d45a5a'}},'Lade...');
+    var holePar=RD.pars[curHole]||4;
     return h('div',{className:'fade'},
       // Header
       h('div',{style:{position:'sticky',top:'0',zIndex:'20',background:'rgba(8,18,10,.97)',backdropFilter:'blur(12px)',borderBottom:'1px solid '+BOR}},
@@ -448,7 +472,7 @@ function App(){
               );
             })
           : flight.map(function(pi){
-              var s=RD.scores[pi]&&RD.scores[pi][curHole];
+              var s=(RD.scores&&RD.scores[pi]&&RD.scores[pi][curHole])||0;
               var v=getV(sett,RD,pi),rec=hs(v,curHole);
               var pts=s>0?stb(s,holePar,rec):null,net=s>0?s-rec:null,diff=s>0?s-holePar:null;
               var pcol2=pc(pi);
@@ -486,7 +510,7 @@ function App(){
               h('div',{style:{fontSize:'8px',color:'#4a6a4a',letterSpacing:'2px',marginBottom:'4px',marginTop:half?'7px':'0'}},lbl),
               h('div',{style:{display:'flex',gap:'2px'}},
                 Array.from({length:9},function(_,i){
-                  var hh=half*9+i,da=flight.every(function(pi){return RD.scores[pi]&&RD.scores[pi][hh]>0;}),ds=flight.some(function(pi){return RD.scores[pi]&&RD.scores[pi][hh]>0;}),cur=hh===curHole;
+                  var hh=half*9+i,da=flight.every(function(pi){return RD.scores&&RD.scores[pi]&&RD.scores[pi][hh]>0;}),ds=flight.some(function(pi){return RD.scores&&RD.scores[pi]&&RD.scores[pi][hh]>0;}),cur=hh===curHole;
                   return h('div',{key:hh,onClick:function(){setCurHole(hh);},style:{flex:'1',display:'flex',flexDirection:'column',alignItems:'center',gap:'1px',padding:'5px 1px',borderRadius:'6px',border:'2px solid '+(cur?G:da?'#3a5a3a':ds?'#2a4a2a':'#1a2e1a'),background:cur?'rgba(212,168,67,.18)':da?'rgba(90,175,122,.10)':ds?'rgba(90,175,122,.05)':'transparent',cursor:'pointer'}},
                     h('span',{style:{fontSize:'11px',fontWeight:'700',color:cur?G:da?'#5aaf7a':ds?'#4a8a4a':'#4a5a4a'}},String(hh+1)),
                     h('span',{style:{fontSize:'10px',fontWeight:'700',color:'#5a7a5a'}},'P'+RD.pars[hh]),
@@ -530,6 +554,9 @@ function App(){
         )
       )
     );
+  }
+
+  }catch(e){console.error('buildGame error:',e);return h('div',{style:{padding:'20px',color:'#d45a5a',background:BG,minHeight:'100vh'}},'Fehler: '+e.message);}
   }
 
   // ── RESULTS
@@ -842,6 +869,7 @@ function App(){
     );
   }
 
+  // End of buildGame try block handled in render error boundary
   var content=null;
   if(tab==='round'){
     if(screen==='setup')content=buildSetup();
@@ -851,7 +879,7 @@ function App(){
   else if(tab==='team'){content=buildTeam();}
   else {content=buildChat();}
 
-  return h('div',{id:'appwrap'},content,showTS&&buildTeamSetup(),navEl);
+  return h('div',{id:'appwrap',style:{background:BG,minHeight:'100vh'}},content,showTS&&buildTeamSetup(),navEl);
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
