@@ -1083,20 +1083,44 @@ Die Ergebnisse können dann wieder geändert werden.')){
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────
+async function withTimeout(promise, ms){
+  return Promise.race([promise, new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout nach '+ms+'ms')),ms))]);
+}
+
 async function init(){
   try{
-    const[ss,ts,rs,tv]=await Promise.all([getDoc(settRef),getDoc(teamCfgRef),getDoc(rndsRef(1)),getDoc(teamOvRef)]);
+    // Try Firebase with 8 second timeout
+    const[ss,ts,rs,tv]=await withTimeout(
+      Promise.all([getDoc(settRef),getDoc(teamCfgRef),getDoc(rndsRef(1)),getDoc(teamOvRef)]),
+      8000
+    );
     if(ss.exists())Object.assign(sett,ss.data());
     if(ts.exists())Object.assign(teamCfg,ts.data());
     if(rs.exists())Object.assign(RD,rs.data(),{roundNum:1});
     if(tv.exists())Object.assign(teamOv,tv.data());
-    // Load all rounds for einzel leaderboard
-    for(let i=1;i<=5;i++){const snap=await getDoc(rndsRef(i));if(snap.exists())allRounds[i]=snap.data();}
+    for(let i=1;i<=5;i++){
+      try{const snap=await getDoc(rndsRef(i));if(snap.exists())allRounds[i]=snap.data();}catch(e){}
+    }
     render();
   }catch(e){
-    document.getElementById('app').innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px;color:#d45a5a;font-size:13px;padding:20px;text-align:center"><div style="font-size:36px">⚠️</div>Verbindungsfehler:<br>${e.message}</div>`;
+    // Show error with retry button instead of permanent failure
+    document.getElementById('app').innerHTML=
+      '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:14px;padding:20px;text-align:center">'
+      +'<div style="font-size:40px">⚠️</div>'
+      +'<div style="font-size:14px;color:#d45a5a;font-weight:700">Verbindungsfehler</div>'
+      +'<div style="font-size:11px;color:#4a6a4a;max-width:280px">'+e.message+'</div>'
+      +'<div style="font-size:11px;color:#4a6a4a">Internetverbindung prüfen und neu versuchen.</div>'
+      +'<button onclick="location.reload()" style="padding:12px 24px;background:linear-gradient(135deg,#d4a843,#a07830);border:none;border-radius:10px;color:#050d05;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px">🔄 Neu laden</button>'
+      +'<button onclick="window.skipFirebase=true;init2()" style="padding:10px 20px;background:#0c180c;border:1px solid #2a4a2a;border-radius:10px;color:#4a6a4a;font-size:12px;cursor:pointer;font-family:inherit">Offline öffnen (keine Sync)</button>'
+      +'</div>';
   }
 }
+
+// Offline fallback – loads with default data, no Firebase
+async function init2(){
+  try{render();}catch(e){console.error(e);}
+}
+
 init();
 </script>
 </body>
