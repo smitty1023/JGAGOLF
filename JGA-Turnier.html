@@ -155,7 +155,7 @@ function matchBarHTML(stat,rN,bN){
 async function saveTournier(){try{await setDoc(tournierRef,tournierData);}catch(e){console.error(e);}}
 
 // ─── LISTENERS ─────────────────────────────────────────────────────────────
-onSnapshot(roundRef,snap=>{
+onSnapshot(roundRefN(currentRound),snap=>{
   if(snap.exists()){
     const d=snap.data();
     // Merge carefully to avoid overwriting local edits
@@ -1006,7 +1006,7 @@ Promise.all([
   for(var ri=1;ri<=5;ri++){try{var snap=await getDoc(roundRefN(ri));if(snap.exists())allRoundData[ri]=snap.data();}catch(ex){}}
   render();
 }).catch(e=>{
-  document.getElementById('root').innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px;color:#d45a5a;font-size:13px;padding:20px;text-align:center"><div style="font-size:36px">⚠️</div>Firebase-Verbindung fehlgeschlagen:<br>${e.message}<br><br><span style="color:#4a6a4a;font-size:11px">Internetverbindung prüfen</span></div>`;
+  document.getElementById('app').innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px;color:#d45a5a;font-size:13px;padding:20px;text-align:center"><div style="font-size:36px">⚠️</div>Firebase-Verbindung fehlgeschlagen:<br>${e.message}<br><br><span style="color:#4a6a4a;font-size:11px">Internetverbindung prüfen</span></div>`;
 })();
 </script>
 </body>
