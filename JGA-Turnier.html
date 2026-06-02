@@ -34,10 +34,22 @@ details>summary::-webkit-details-marker{display:none}
 <body>
 <div id="app"><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:14px;color:#d4a843;font-size:15px"><span class="spin" style="font-size:36px">⛳</span>Verbinde mit Firebase...</div></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
-(async()=>{
-const{initializeApp}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
-const{getFirestore,doc,collection,setDoc,getDoc,onSnapshot,addDoc,serverTimestamp,query,orderBy,updateDoc,deleteDoc}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+// Firebase compat SDK
+const initializeApp = firebase.initializeApp.bind(firebase);
+function getFirestore(app){return app.firestore();}
+function doc(db,...args){let r=db;for(let i=0;i<args.length;i+=2)r=r.collection(args[i]).doc(args[i+1]);return r;}
+function collection(db,name){return db.collection(name);}
+async function setDoc(ref,data){await ref.set(data);}
+async function getDoc(ref){const s=await ref.get();return{exists:()=>s.exists,data:()=>s.data(),id:s.id};}
+function onSnapshot(ref,cb){return ref.onSnapshot(s=>{if(s.docs){const snap={docs:s.docs.map(d=>({id:d.id,data:()=>d.data()}))};cb(snap);}else{cb({exists:()=>s.exists,data:()=>s.data()});}});}
+async function addDoc(col,data){return await col.add(data);}
+function serverTimestamp(){return firebase.firestore.FieldValue.serverTimestamp();}
+function query(col,...args){let q=col;args.forEach(a=>{if(a._type==='orderBy')q=q.orderBy(a.field,a.dir);});return q;}
+function orderBy(field,dir){return{_type:'orderBy',field,dir:dir||'asc'};}
+(()=>{
 
 // ─── FIREBASE ──────────────────────────────────────────────────────────────
 const fb=initializeApp({apiKey:"AIzaSyCn42Sz5SOuv5PMvkpG7tEi788-jxNicAg",authDomain:"jga2026nico.firebaseapp.com",projectId:"jga2026nico",storageBucket:"jga2026nico.firebasestorage.app",messagingSenderId:"530783593771",appId:"1:530783593771:web:3678d6029dfbd2cc1c916e"});
@@ -995,7 +1007,6 @@ Promise.all([
   render();
 }).catch(e=>{
   document.getElementById('root').innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px;color:#d45a5a;font-size:13px;padding:20px;text-align:center"><div style="font-size:36px">⚠️</div>Firebase-Verbindung fehlgeschlagen:<br>${e.message}<br><br><span style="color:#4a6a4a;font-size:11px">Internetverbindung prüfen</span></div>`;
-});
 })();
 </script>
 </body>
