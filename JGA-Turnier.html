@@ -34,9 +34,10 @@ details>summary::-webkit-details-marker{display:none}
 <body>
 <div id="app"><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:14px;color:#d4a843;font-size:15px"><span class="spin" style="font-size:36px">⛳</span>Verbinde mit Firebase...</div></div>
 
-<script type="module">
-import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import{getFirestore,doc,collection,setDoc,getDoc,onSnapshot,addDoc,serverTimestamp,query,orderBy,updateDoc,deleteDoc}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+<script>
+(async()=>{
+const{initializeApp}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
+const{getFirestore,doc,collection,setDoc,getDoc,onSnapshot,addDoc,serverTimestamp,query,orderBy,updateDoc,deleteDoc}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
 
 // ─── FIREBASE ──────────────────────────────────────────────────────────────
 const fb=initializeApp({apiKey:"AIzaSyCn42Sz5SOuv5PMvkpG7tEi788-jxNicAg",authDomain:"jga2026nico.firebaseapp.com",projectId:"jga2026nico",storageBucket:"jga2026nico.firebasestorage.app",messagingSenderId:"530783593771",appId:"1:530783593771:web:3678d6029dfbd2cc1c916e"});
@@ -995,6 +996,7 @@ Promise.all([
 }).catch(e=>{
   document.getElementById('root').innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px;color:#d45a5a;font-size:13px;padding:20px;text-align:center"><div style="font-size:36px">⚠️</div>Firebase-Verbindung fehlgeschlagen:<br>${e.message}<br><br><span style="color:#4a6a4a;font-size:11px">Internetverbindung prüfen</span></div>`;
 });
+})();
 </script>
 </body>
 </html>
