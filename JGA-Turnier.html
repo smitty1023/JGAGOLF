@@ -156,7 +156,14 @@ function matchBarHTML(stat,rN,bN){
 }
 
 onSnapshot(roundRefN(currentRound),function(snap){
-  if(snap.exists()){roundData=Object.assign({},roundData,snap.data());render();}
+  if(snap.exists()){
+    var d=snap.data();
+    // Only sync scores and locked - don't overwrite user's local selections
+    if(d.scores)roundData.scores=d.scores;
+    if(d.greenScores)roundData.greenScores=d.greenScores;
+    if(typeof d.locked!=='undefined')roundData.locked=d.locked;
+    render();
+  }
 });
 onSnapshot(rydercupRef,function(snap){
   if(snap.exists()){rydercupData=snap.data();render();}
@@ -574,9 +581,9 @@ function attachEvents(){
         roundData.scores[activeFlight][p][hole]=Math.max(0,parseInt(e.target.value)||0);
         saveRound();render();
       };
-      [2,3,4,5,6,7].forEach(function(qv){
+      [1,2,3,4,5,6,7,8,9,10,11,12].forEach(function(qv){
         var qb=document.getElementById('q-'+p+'-'+qv);
-        if(qb)qb.onclick=function(){roundData.scores[activeFlight][p][hole]=qv;saveRound();render();};
+        if(qb)(function(pp,vv){qb.onclick=function(){roundData.scores[activeFlight][pp][hole]=vv;saveRound();render();};})(p,qv);
       });
     })(pi);
   }
