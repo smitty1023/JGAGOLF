@@ -85,15 +85,39 @@ var teamCfg={
   fourball:{flights:[{red:[0,1],blue:[4,5]},{red:[2,3],blue:[6,7]}]},
   greensomes:{flights:[{red:[0,1],blue:[4,5]},{red:[2,3],blue:[6,7]}]}
 };
+var rydercupData={red:0,blue:0,matches:[]};
 
 function roundRefN(n){return doc(db,'jga2026-rounds','round'+(n||currentRound));}
 var teamCfgRef=doc(db,'jga2026','teamConfig');
+var rydercupRef=doc(db,'jga2026','rydercup');
 var tournierRef=doc(db,'jga','turnier');
 var chatCol=collection(db,'jga-chat');
 
 function saveRound(){return setDoc(roundRefN(roundData.roundNum||currentRound),roundData).catch(function(e){console.error(e);});}
 function saveTournier(){return setDoc(tournierRef,tournierData).catch(function(e){console.error(e);});}
 function saveTeamCfg(){return setDoc(teamCfgRef,teamCfg).catch(function(e){console.error(e);});}
+function saveRydercup(){return setDoc(rydercupRef,rydercupData).catch(function(e){console.error(e);});}
+
+// Calculate match points from current round
+function calcRoundMatchPoints(){
+  var fmt=roundData.format;
+  if(['matchplay','fourball','greensomes'].indexOf(fmt)<0)return null;
+  var tf=getTeamFlights(fmt);
+  var totalR=0,totalB=0,matchResults=[];
+  tf.filter(function(f){return f.red.length&&f.blue.length;}).forEach(function(f,fi){
+    var stat=calcMatchStat(f.red,f.blue,fmt,fi);
+    var r=0,b=0;
+    stat.res.forEach(function(rs){if(rs==='red')r++;else if(rs==='blue')b++;else if(rs==='half'){r+=0.5;b+=0.5;}});
+    var tot=r+b||1;
+    totalR+=r/tot;totalB+=b/tot;
+    matchResults.push({
+      rNames:f.red.map(function(pi){return flatName(pi);}).join(' & '),
+      bNames:f.blue.map(function(pi){return flatName(pi);}).join(' & '),
+      rPts:r,bPts:b
+    });
+  });
+  return{red:parseFloat(totalR.toFixed(1)),blue:parseFloat(totalB.toFixed(1)),matches:matchResults,format:fmt,round:roundData.roundNum||1,course:roundData.courseName};
+}
 
 function getV(){return roundData.hcps.map(function(fh){return fh.map(function(h){return calcVorgabe(h,roundData.cr,roundData.sr,roundData.pars);});});}
 function getStbT(v){return roundData.scores.map(function(fs,fi){return fs.map(function(ps,pi){return ps.reduce(function(sum,s,h){return sum+(s>0?calcStb(s,roundData.pars[h],getHS(v[fi][pi],h)):0);},0);});});}
@@ -134,6 +158,9 @@ function matchBarHTML(stat,rN,bN){
 onSnapshot(roundRefN(currentRound),function(snap){
   if(snap.exists()){roundData=Object.assign({},roundData,snap.data());render();}
 });
+onSnapshot(rydercupRef,function(snap){
+  if(snap.exists()){rydercupData=snap.data();render();}
+});
 onSnapshot(tournierRef,function(snap){
   if(snap.exists()){tournierData=snap.data();render();}
 });
@@ -170,9 +197,9 @@ function buildApp(){
 }
 
 function buildSetup(v){
-  var fmts=['stableford','stroke','matchplay','fourball','greensomes'];
-  var ficons={stableford:'&#11088;',stroke:'&#128202;',matchplay:'&#9876;',fourball:'&#127948;',greensomes:'&#128260;'};
-  var flabels={stableford:'Stableford',stroke:'Stroke',matchplay:'Match Play',fourball:'Four-Ball',greensomes:'Greensomes'};
+  var fmts=['stableford','matchplay','fourball','greensomes'];
+  var ficons={stableford:'&#11088;',matchplay:'&#9876;',fourball:'&#127948;',greensomes:'&#128260;'};
+  var flabels={stableford:'Stableford',matchplay:'Match Play',fourball:'Four-Ball',greensomes:'Greensomes'};
   var fmtBtns=fmts.map(function(f){
     var act=roundData.format===f;
     return '<button id="fmt-'+f+'" style="flex:1;padding:9px 3px;border:2px solid '+(act?G:BOR)+';border-radius:9px;background:'+(act?'rgba(212,168,67,.10)':'#0c180c')+';color:'+(act?G:'#4a6a4a')+';font-family:inherit;font-size:10px;font-weight:'+(act?700:400)+';cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:15px">'+ficons[f]+'</span>'+flabels[f]+'</button>';
@@ -350,6 +377,8 @@ function buildResults(v,stbT,gross,netto){
   +'</div>';
 }
 
+var rydercupSubTab='einzel'; // einzel | rydercup
+
 function buildTurnier(v,stbT){
   var flatNames=roundData.names[0].concat(roundData.names[1]);
   var totals=flatNames.map(function(_,pi){return tournierData.rounds.reduce(function(s,r){return s+(r[pi]||0);},0);});
@@ -370,14 +399,50 @@ function buildTurnier(v,stbT){
     }).join('');
     return '<tr style="background:'+(ranking.indexOf(pi)%2===0?'rgba(0,0,0,.10)':'transparent')+'"><td style="padding:7px 10px;color:'+col+';font-weight:700;white-space:nowrap">'+flatNames[pi].split(' ')[0]+'</td>'+cells+'<td style="padding:7px 6px;text-align:center;font-weight:700;color:'+G+';font-size:13px">'+totals[pi]+'</td></tr>';
   }).join('');
-  return '<div style="position:sticky;top:0;z-index:20;background:rgba(8,18,10,.97);backdrop-filter:blur(12px);border-bottom:1px solid '+BOR+';padding:12px 16px;text-align:center"><div style="font-size:15px;color:'+G+';letter-spacing:4px">TURNIERWERTUNG</div><div style="font-size:9px;color:#4a6a4a">5 RUNDEN - STABLEFORD - LIVE</div></div>'
+  var rydercupHtml=buildRydercupTab();
+  var subtabs='<div style="display:flex;border-bottom:1px solid '+BOR+'"><button id="sub-einzel" style="flex:1;padding:10px;border:none;background:'+(rydercupSubTab==='einzel'?'rgba(212,168,67,.10)':'transparent')+';color:'+(rydercupSubTab==='einzel'?G:'#4a6a4a')+';font-family:inherit;font-size:12px;font-weight:'+(rydercupSubTab==='einzel'?700:400)+';border-bottom:2px solid '+(rydercupSubTab==='einzel'?G:'transparent')+';cursor:pointer">Einzel</button><button id="sub-rydercup" style="flex:1;padding:10px;border:none;background:'+(rydercupSubTab==='rydercup'?'rgba(212,168,67,.10)':'transparent')+';color:'+(rydercupSubTab==='rydercup'?G:'#4a6a4a')+';font-family:inherit;font-size:12px;font-weight:'+(rydercupSubTab==='rydercup'?700:400)+';border-bottom:2px solid '+(rydercupSubTab==='rydercup'?G:'transparent')+';cursor:pointer">Ryder Cup</button></div>';
+
+  return '<div style="position:sticky;top:0;z-index:20;background:rgba(8,18,10,.97);backdrop-filter:blur(12px);border-bottom:1px solid '+BOR+';padding:12px 16px;text-align:center"><div style="font-size:15px;color:'+G+';letter-spacing:4px">TURNIERWERTUNG</div><div style="font-size:9px;color:#4a6a4a">5 RUNDEN - STABLEFORD - LIVE</div></div>'+subtabs+(rydercupSubTab==='rydercup'?rydercupHtml:
   +'<div class="fade" style="max-width:580px;margin:0 auto;padding:18px 14px 20px">'
   +'<div style="font-size:9px;color:'+G+';letter-spacing:4px;text-transform:uppercase;margin-bottom:10px">Gesamtrangliste</div>'+rankRows
   +'<div style="margin-top:20px;margin-bottom:14px;background:rgba(212,168,67,.07);border:1px solid '+BOR+';border-radius:10px;padding:12px 14px"><div style="font-size:10px;color:#8a9a7a;margin-bottom:10px">Aktuelle Runden-Scores &#252;bernehmen:</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+applyBtns+'</div></div>'
   +'<div style="font-size:9px;color:'+G+';letter-spacing:4px;text-transform:uppercase;margin-bottom:10px">Punkte pro Runde</div>'
   +'<div style="overflow-x:auto;border-radius:10px;border:1px solid '+BOR+';margin-bottom:8px"><table style="width:100%;border-collapse:collapse;font-size:11px;min-width:360px"><thead><tr style="background:#0c180c"><th style="padding:8px 10px;color:#4a6a4a;text-align:left;border-bottom:1px solid '+BOR+';font-weight:400">Spieler</th>'+['R1','R2','R3','R4','R5'].map(function(r){return '<th style="padding:8px 6px;color:'+G+';text-align:center;border-bottom:1px solid '+BOR+';font-weight:700">'+r+'</th>';}).join('')+'<th style="padding:8px 6px;color:'+G+';text-align:center;border-bottom:1px solid '+BOR+';font-weight:700">&#8721;</th></tr></thead><tbody>'+tableRows+'</tbody></table></div>'
   +'<button id="reset-turnier" style="width:100%;padding:12px;background:rgba(212,68,68,.08);border:1px solid #5a2a2a;border-radius:10px;color:#d45a5a;font-size:12px;cursor:pointer;font-family:inherit">Turnierwertung zur&#252;cksetzen</button>'
-  +'</div>';
+  +'</div>');
+}
+
+function buildRydercupTab(){
+  var isTeamFmt=['matchplay','fourball','greensomes'].indexOf(roundData.format)>=0;
+  // Live current round
+  var liveHtml='';
+  if(isTeamFmt){
+    var pts=calcRoundMatchPoints();
+    if(pts){
+      var matchHtml=pts.matches.map(function(m){
+        return '<div style="background:rgba(0,0,0,.2);border-radius:8px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;color:#d45a5a">'+m.rNames+'</span><span style="font-size:12px;font-weight:700;color:#d8d0c0">'+m.rPts+' : '+m.bPts+'</span><span style="font-size:11px;color:#5a7ad4">'+m.bNames+'</span></div>';
+      }).join('');
+      liveHtml='<div style="background:rgba(212,168,67,.07);border:1px solid '+G+'44;border-radius:12px;padding:12px;margin-bottom:14px"><div style="font-size:10px;color:'+G+';font-weight:700;margin-bottom:8px">&#128308; Runde '+roundData.roundNum+' live ('+roundData.format+')</div>'+matchHtml+'<div style="display:flex;justify-content:space-around;margin-top:8px;padding-top:8px;border-top:1px solid #1a2e1a"><div style="text-align:center"><div style="font-size:22px;font-weight:700;color:#d45a5a">'+pts.red+'</div><div style="font-size:10px;color:#4a6a4a">Rot</div></div><div style="text-align:center;font-size:12px;color:#4a6a4a;align-self:center">vs</div><div style="text-align:center"><div style="font-size:22px;font-weight:700;color:#5a7ad4">'+pts.blue+'</div><div style="font-size:10px;color:#4a6a4a">Blau</div></div></div></div>';
+    }
+  }
+  // Overall scores
+  var savedR=rydercupData.red||0,savedB=rydercupData.blue||0;
+  var tot=savedR+savedB||1;
+  var bar='<div style="background:#0c180c;border-radius:20px;height:16px;overflow:hidden;margin:10px 0;display:flex"><div style="width:'+(savedR/tot*100).toFixed(1)+'%;background:#d45a5a;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">'+savedR+'</div><div style="width:'+(savedB/tot*100).toFixed(1)+'%;background:#5a7ad4;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">'+savedB+'</div></div>';
+  var matchHistory=(rydercupData.matches||[]).map(function(m){
+    return '<div style="background:rgba(0,0,0,.2);border-radius:8px;padding:8px 10px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:10px;color:#4a6a4a">R'+m.round+' '+m.format+'</span><span style="font-size:13px;font-weight:700;color:#d8d0c0">'+m.red+' : '+m.blue+'</span><span style="font-size:10px;color:#4a6a4a">'+m.course.split(' ')[0]+'</span></div>';
+  }).join('');
+  return '<div class="fade" style="max-width:580px;margin:0 auto;padding:18px 14px 20px">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">'
+    +'<div style="background:rgba(212,68,68,.12);border:2px solid #d45a5a44;border-radius:14px;padding:14px;text-align:center"><div style="font-size:13px;color:#d45a5a;font-weight:700;margin-bottom:6px">Team Rot</div><div style="font-size:40px;font-weight:700;color:#d45a5a">'+savedR+'</div><div style="font-size:10px;color:#8a4a4a">Punkte</div></div>'
+    +'<div style="background:rgba(90,122,212,.12);border:2px solid #5a7ad444;border-radius:14px;padding:14px;text-align:center"><div style="font-size:13px;color:#5a7ad4;font-weight:700;margin-bottom:6px">Team Blau</div><div style="font-size:40px;font-weight:700;color:#5a7ad4">'+savedB+'</div><div style="font-size:10px;color:#4a4a8a">Punkte</div></div>'
+    +'</div>'
+    +bar
+    +liveHtml
+    +(matchHistory?'<div style="font-size:9px;color:'+G+';letter-spacing:4px;text-transform:uppercase;margin-bottom:8px">Match History</div>'+matchHistory:'<div style="text-align:center;color:#3a5a3a;padding:20px;font-size:12px">Noch keine Team-Runden gespeichert</div>')
+    +'<button id="save-rydercup-round" style="width:100%;padding:12px;background:linear-gradient(135deg,#5aaf7a,#2a7a4a);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:12px">Runde zur Ryder Cup Wertung hinzufuegen</button>'
+    +'<button id="reset-rydercup" style="width:100%;padding:11px;background:rgba(212,68,68,.08);border:1px solid #5a2a2a;border-radius:10px;color:#d45a5a;font-size:12px;cursor:pointer;font-family:inherit;margin-top:8px">Ryder Cup zuruecksetzen</button>'
+    +'</div>';
 }
 
 function buildEinzel(){
@@ -452,7 +517,7 @@ function attachEvents(){
   });
 
   // Format buttons
-  ['stableford','stroke','matchplay','fourball','greensomes'].forEach(function(f){
+  ['stableford','matchplay','fourball','greensomes'].forEach(function(f){
     var el=document.getElementById('fmt-'+f);
     if(!el)return;
     el.onclick=function(){
@@ -643,6 +708,39 @@ function attachEvents(){
     }
   };
 
+  // Rydercup subtabs
+  var subEinzel=document.getElementById('sub-einzel');
+  if(subEinzel)subEinzel.onclick=function(){rydercupSubTab='einzel';render();};
+  var subRyder=document.getElementById('sub-rydercup');
+  if(subRyder)subRyder.onclick=function(){rydercupSubTab='rydercup';render();};
+
+  // Save rydercup round
+  var saveRyderBtn=document.getElementById('save-rydercup-round');
+  if(saveRyderBtn)saveRyderBtn.onclick=function(){
+    var pts=calcRoundMatchPoints();
+    if(!pts){alert('Nur bei Match Play, Four-Ball oder Greensomes moeglich!');return;}
+    if(!confirm('Runde '+roundData.roundNum+' zur Ryder Cup Wertung hinzufuegen?'))return;
+    var matches=rydercupData.matches||[];
+    matches=matches.filter(function(m){return m.round!==roundData.roundNum;});
+    matches.push({round:roundData.roundNum,format:roundData.format,course:roundData.courseName,red:pts.red,blue:pts.blue});
+    rydercupData={
+      red:parseFloat(matches.reduce(function(s,m){return s+m.red;},0).toFixed(1)),
+      blue:parseFloat(matches.reduce(function(s,m){return s+m.blue;},0).toFixed(1)),
+      matches:matches
+    };
+    saveRydercup();
+    alert('Gespeichert! Rot: '+rydercupData.red+' Blau: '+rydercupData.blue);
+    render();
+  };
+
+  // Reset rydercup
+  var resetRyderBtn=document.getElementById('reset-rydercup');
+  if(resetRyderBtn)resetRyderBtn.onclick=function(){
+    if(confirm('Ryder Cup Wertung zuruecksetzen?')){
+      rydercupData={red:0,blue:0,matches:[]};saveRydercup();render();
+    }
+  };
+
   // Chat
   var confirmNameEl=document.getElementById('confirm-name');
   if(confirmNameEl)confirmNameEl.onclick=function(){
@@ -701,12 +799,14 @@ function attachEvents(){
 Promise.all([
   getDoc(roundRefN(1)),
   getDoc(tournierRef),
-  getDoc(teamCfgRef)
+  getDoc(teamCfgRef),
+  getDoc(rydercupRef)
 ]).then(function(results){
-  var rs=results[0],ts=results[1],tc=results[2];
+  var rs=results[0],ts=results[1],tc=results[2],rc=results[3];
   if(rs.exists())roundData=Object.assign({},roundData,rs.data(),{roundNum:1});
   if(ts.exists())tournierData=ts.data();
   if(tc.exists())teamCfg=Object.assign({},teamCfg,tc.data());
+  if(rc.exists())rydercupData=rc.data();
   var chain=Promise.resolve();
   [1,2,3,4,5].forEach(function(ri){
     chain=chain.then(function(){
